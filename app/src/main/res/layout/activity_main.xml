@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="14dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:text="源(翻译zip)："
+            android:textStyle="bold"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+        <EditText
+            android:id="@+id/etSrc"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="/sdcard/.../chinaese_res/xxx_com.nexon.mdnf.zip 或目录"
+            android:inputType="text" />
+
+        <Button
+            android:id="@+id/btnSrc"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="选择源文件/目录" />
+
+        <TextView
+            android:text="目标(游戏 files 目录)："
+            android:textStyle="bold"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp" />
+
+        <EditText
+            android:id="@+id/etTgt"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="游戏数据根，如 /sdcard/Android/data/com.nexon.mdnf (zip自带files/自动对齐)"
+            android:text="/sdcard/Android/data/com.nexon.mdnf"
+            android:inputType="text" />
+
+        <Button
+            android:id="@+id/btnTgt"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="选择目标目录" />
+
+        <Button
+            android:id="@+id/btnParse"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="① 解析源(检查结构)" />
+
+        <Button
+            android:id="@+id/btnApply"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="② 替换(自动备份+覆盖)" />
+
+        <Button
+            android:id="@+id/btnRestore"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="还原(如已替换)" />
+
+        <TextView
+            android:id="@+id/tvLog"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:fontFamily="monospace"
+            android:textSize="12sp"
+            android:minHeight="120dp" />
+    </LinearLayout>
+</ScrollView>
