@@ -52,6 +52,7 @@ public class MainActivity extends Activity {
         etSrc = findViewById(R.id.etSrc);
         etTgt = findViewById(R.id.etTgt);
         tvLog = findViewById(R.id.tvLog);
+        ShellExec.requestPermission(this);
 
         Button btnSrc = findViewById(R.id.btnSrc);
         Button btnTgt = findViewById(R.id.btnTgt);
@@ -90,7 +91,7 @@ public class MainActivity extends Activity {
     }
 
     private boolean dirExists(String d) {
-        try { String o = execSuOut("test -d " + q(d) + " && echo 1"); return o.trim().equals("1"); }
+        try { String o = ShellExec.execOut("test -d " + q(d) + " && echo 1"); return o.trim().equals("1"); }
         catch (Throwable t) { return false; }
     }
 
@@ -174,7 +175,7 @@ public class MainActivity extends Activity {
                 } else {
                     cmd = "find " + q(base) + " -maxdepth 6 -type f -iname '*" + kwS + "*zip' 2>/dev/null";
                 }
-                String out = execSuOut(cmd);
+                String out = ShellExec.execOut(cmd);
                 for (String line : out.split("\n")) {
                     line = line.trim();
                     if (!line.isEmpty()) rows.add(line);
@@ -205,7 +206,7 @@ public class MainActivity extends Activity {
             List<String> items = new ArrayList<>();
             String err = null;
             try {
-                String out = execSuOut("ls -Ap " + q(dir));
+                String out = ShellExec.execOut("ls -Ap " + q(dir));
                 for (String line : out.split("\n")) {
                     line = line.trim();
                     if (line.isEmpty()) continue;
@@ -236,43 +237,13 @@ public class MainActivity extends Activity {
     private void runTask(final ThrowingRunnable r) {
         new Thread(() -> {
             try {
-                if (!isRoot()) { log("⚠️ 未获得 root，请先授予 su 权限！"); return; }
+                if (!ShellExec.isReady()) { log("⚠️ 未就绪：root 版请授予 su；Shizuku 版请先启动 Shizuku 并授权"); return; }
                 r.run();
             } catch (Throwable t) {
                 Log.e("PatchTool", "err", t);
                 log("错误: " + t.getMessage());
             }
         }).start();
-    }
-
-    private boolean isRoot() {
-        try {
-            Process p = execSu("id");
-            String out = readAll(p.getInputStream());
-            p.waitFor();
-            return out != null && out.contains("uid=0");
-        } catch (Throwable t) { return false; }
-    }
-
-    private Process execSu(String shell) throws Exception {
-        return Runtime.getRuntime().exec(new String[]{"su", "-c", shell});
-    }
-
-    private String execSuOut(String shell) throws Exception {
-        Process p = execSu(shell);
-        String o = readAll(p.getInputStream());
-        String e = readAll(p.getErrorStream());
-        int code = p.waitFor();
-        if (code != 0) throw new RuntimeException("su 退出码 " + code + " | " + e);
-        return o;
-    }
-
-    private String readAll(InputStream is) throws Exception {
-        BufferedReader br = new BufferedReader(new InputStreamReader(is));
-        StringBuilder sb = new StringBuilder();
-        String line;
-        while ((line = br.readLine()) != null) sb.append(line).append("\n");
-        return sb.toString();
     }
 
     private String q(String s) { return "'" + s.replace("'", "'\\''") + "'"; }
@@ -285,7 +256,7 @@ public class MainActivity extends Activity {
         if (readable) return zip;
         File dest = new File(getCacheDir(), "pull.zip");
         if (dest.exists()) dest.delete();
-        execSuOut("cp -f " + q(zip) + " " + q(dest.getAbsolutePath()));
+        ShellExec.execOut("cp -f " + q(zip) + " " + q(dest.getAbsolutePath()));
         return dest.getAbsolutePath();
     }
 
@@ -307,7 +278,7 @@ public class MainActivity extends Activity {
     }
 
     private String findZipInDir(String dir) throws Exception {
-        String out = execSuOut("ls -1t " + q(dir) + "/*.zip 2>/dev/null | head -n1");
+        String out = ShellExec.execOut("ls -1t " + q(dir) + "/*.zip 2>/dev/null | head -n1");
         out = out.trim();
         return out.isEmpty() ? null : out;
     }
@@ -363,14 +334,14 @@ public class MainActivity extends Activity {
     private String backupCovered(String tgt, List<String> top) throws Exception {
         String ts = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
         String backupDir = "/sdcard/PatchTool_backup/" + ts;
-        execSuOut("mkdir -p " + q(backupDir));
+        ShellExec.execOut("mkdir -p " + q(backupDir));
         int backed = 0;
         for (String entry : top) {
             String full = tgt.endsWith("/") ? tgt + entry : tgt + "/" + entry;
-            boolean exists = execSuOut("test -e " + q(full) + " && echo 1").trim().equals("1");
+            boolean exists = ShellExec.execOut("test -e " + q(full) + " && echo 1").trim().equals("1");
             if (exists) {
-                execSuOut("cp -rf " + q(full) + " " + q(backupDir + "/"));
-                String size = execSuOut("du -sh " + q(full) + " 2>/dev/null | cut -f1").trim();
+                ShellExec.execOut("cp -rf " + q(full) + " " + q(backupDir + "/"));
+                String size = ShellExec.execOut("du -sh " + q(full) + " 2>/dev/null | cut -f1").trim();
                 log("  · 备份 " + entry + " (" + size + ")");
                 backed++;
             } else {
@@ -395,7 +366,7 @@ public class MainActivity extends Activity {
         List<String> top = zipTopLevel(wrk);
         log("zip 将覆盖的顶层项: " + top);
         String backupRoot = "/sdcard/PatchTool_backup";
-        boolean hasBackup = execSuOut("test -d " + q(backupRoot) + " && ls -1A " + q(backupRoot) + " 2>/dev/null | head -n1").trim().length() > 0;
+        boolean hasBackup = ShellExec.execOut("test -d " + q(backupRoot) + " && ls -1A " + q(backupRoot) + " 2>/dev/null | head -n1").trim().length() > 0;
         if (!hasBackup) {
             log("① 首次替换：备份原版覆盖项...");
             backupCovered(gfiles, top);
@@ -406,8 +377,8 @@ public class MainActivity extends Activity {
         unzipStructure(wrk);
         File filesRoot = new File(new File(getCacheDir(), "ziproot"), "files");
         if (!filesRoot.isDirectory()) { log("未发现 files/ 根，已中止"); return; }
-        execSuOut("mkdir -p " + q(gfiles));
-        execSuOut("cp -rf " + q(filesRoot.getAbsolutePath()) + "/. " + q(gfiles) + "/");
+        ShellExec.execOut("mkdir -p " + q(gfiles));
+        ShellExec.execOut("cp -rf " + q(filesRoot.getAbsolutePath()) + "/. " + q(gfiles) + "/");
         log("✅ 替换完成");
     }
 
@@ -417,10 +388,10 @@ public class MainActivity extends Activity {
         if (tgt.isEmpty()) { log("请填写目标目录"); return; }
         String gfiles = gameFiles(tgt);
         String bp = "/sdcard/PatchTool_backup";
-        String latest = execSuOut("ls -1dt " + q(bp) + "/* 2>/dev/null | head -n1").trim();
+        String latest = ShellExec.execOut("ls -1dt " + q(bp) + "/* 2>/dev/null | head -n1").trim();
         if (latest.isEmpty()) { log("无可用备份"); return; }
         log("还原自: " + latest);
-        execSuOut("cp -rf " + q(latest) + "/. " + q(gfiles) + "/");
+        ShellExec.execOut("cp -rf " + q(latest) + "/. " + q(gfiles) + "/");
         log("✅ 还原完成");
     }
 

@@ -14,6 +14,19 @@ android {
         versionName "1.0"
     }
 
+    flavorDimensions "impl"
+    productFlavors {
+        // 免 root 版：走 Shizuku (adb shell)，包名 com.patch.tool.shizuku
+        shizuku {
+            dimension "impl"
+            applicationIdSuffix ".shizuku"
+        }
+        // root 版：走 su，包名 com.patch.tool
+        root {
+            dimension "impl"
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
@@ -28,4 +41,7 @@ android {
 }
 
 dependencies {
+    shizukuImplementation "dev.rikka.shizuku:api:13.1.5"
+    shizukuImplementation "dev.rikka.shizuku:provider:13.1.5"
+    shizukuImplementation "androidx.annotation:annotation:1.7.0"
 }
