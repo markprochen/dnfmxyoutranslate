@@ -7,6 +7,7 @@ import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 
 import rikka.shizuku.Shizuku;
 
@@ -45,13 +46,27 @@ public final class ShellExec {
         } catch (Throwable ignored) { }
     }
 
-    public static String execOut(String cmd) throws Exception {
+    public static ShellResult exec(String cmd) throws Exception {
         Process p = newProcess(new String[]{"sh", "-c", cmd}, null, null);
-        String o = readAll(p.getInputStream());
-        String e = readAll(p.getErrorStream());
+        StreamCollector stdout = new StreamCollector(p.getInputStream());
+        StreamCollector stderr = new StreamCollector(p.getErrorStream());
+        stdout.start();
+        stderr.start();
+
         int code = p.waitFor();
-        if (code != 0) throw new RuntimeException("sh exit " + code + " | " + e);
-        return o;
+        stdout.join();
+        stderr.join();
+        stdout.rethrow();
+        stderr.rethrow();
+        return new ShellResult(code, stdout.value(), stderr.value());
+    }
+
+    public static String execOut(String cmd) throws Exception {
+        ShellResult result = exec(cmd);
+        if (!result.isSuccess()) {
+            throw new RuntimeException(result.failure("adb shell 执行"));
+        }
+        return result.stdout;
     }
 
     private static Process newProcess(String[] cmd, String[] env, String dir) throws Exception {
@@ -63,11 +78,33 @@ public final class ShellExec {
         return (Process) sNewProcess.invoke(null, cmd, env, dir);
     }
 
-    private static String readAll(InputStream is) throws Exception {
-        BufferedReader br = new BufferedReader(new InputStreamReader(is));
-        StringBuilder sb = new StringBuilder();
-        String line;
-        while ((line = br.readLine()) != null) sb.append(line).append("\n");
-        return sb.toString();
+    private static final class StreamCollector extends Thread {
+        private final InputStream input;
+        private final StringBuilder value = new StringBuilder();
+        private Exception error;
+
+        StreamCollector(InputStream input) {
+            this.input = input;
+            setDaemon(true);
+        }
+
+        @Override
+        public void run() {
+            try (BufferedReader br = new BufferedReader(
+                    new InputStreamReader(input, StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = br.readLine()) != null) value.append(line).append('\n');
+            } catch (Exception e) {
+                error = e;
+            }
+        }
+
+        String value() {
+            return value.toString();
+        }
+
+        void rethrow() throws Exception {
+            if (error != null) throw error;
+        }
     }
 }

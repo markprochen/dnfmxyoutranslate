@@ -91,8 +91,21 @@ public class MainActivity extends Activity {
     }
 
     private boolean dirExists(String d) {
-        try { String o = ShellExec.execOut("test -d " + q(d) + " && echo 1"); return o.trim().equals("1"); }
-        catch (Throwable t) { return false; }
+        try {
+            ShellResult result = ShellExec.exec("test -d " + q(d));
+            if (result.isSuccess()) return true;
+            if (result.exitCode == 1) return false;
+            throw new RuntimeException(result.failure("\u68c0\u67e5\u76ee\u5f55 " + d));
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    private boolean pathExists(String path) throws Exception {
+        ShellResult result = ShellExec.exec("test -e " + q(path));
+        if (result.isSuccess()) return true;
+        if (result.exitCode == 1) return false;
+        throw new RuntimeException(result.failure("\u68c0\u67e5\u8def\u5f84 " + path));
     }
 
     // ================== root 文件浏览器 ==================
@@ -291,7 +304,7 @@ public class MainActivity extends Activity {
             Enumeration<? extends ZipEntry> en = zf.entries();
             while (en.hasMoreElements()) {
                 ZipEntry e = en.nextElement();
-                File out = new File(dst, e.getName());
+                File out = safeZipEntry(dst, e.getName());
                 if (e.isDirectory()) { out.mkdirs(); continue; }
                 File parent = out.getParentFile();
                 if (parent != null) parent.mkdirs();
@@ -330,6 +343,16 @@ public class MainActivity extends Activity {
         return top;
     }
 
+    private File safeZipEntry(File root, String entryName) throws Exception {
+        File out = new File(root, entryName);
+        String rootPath = root.getCanonicalPath();
+        String outPath = out.getCanonicalPath();
+        if (!outPath.equals(rootPath) && !outPath.startsWith(rootPath + File.separator)) {
+            throw new SecurityException("zip \u6761\u76ee\u8def\u5f84\u975e\u6cd5: " + entryName);
+        }
+        return out;
+    }
+
     // 只备份"将被 zip 覆盖"的顶层项到带时间戳的备份目录，并逐项打日志
     private String backupCovered(String tgt, List<String> top) throws Exception {
         String ts = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
@@ -338,7 +361,7 @@ public class MainActivity extends Activity {
         int backed = 0;
         for (String entry : top) {
             String full = tgt.endsWith("/") ? tgt + entry : tgt + "/" + entry;
-            boolean exists = ShellExec.execOut("test -e " + q(full) + " && echo 1").trim().equals("1");
+            boolean exists = pathExists(full);
             if (exists) {
                 ShellExec.execOut("cp -rf " + q(full) + " " + q(backupDir + "/"));
                 String size = ShellExec.execOut("du -sh " + q(full) + " 2>/dev/null | cut -f1").trim();
@@ -366,7 +389,12 @@ public class MainActivity extends Activity {
         List<String> top = zipTopLevel(wrk);
         log("zip 将覆盖的顶层项: " + top);
         String backupRoot = "/sdcard/PatchTool_backup";
-        boolean hasBackup = ShellExec.execOut("test -d " + q(backupRoot) + " && ls -1A " + q(backupRoot) + " 2>/dev/null | head -n1").trim().length() > 0;
+        ShellResult backupCheck = ShellExec.exec(
+                "if [ -d " + q(backupRoot) + " ]; then ls -1A " + q(backupRoot) + " 2>/dev/null | head -n1; fi");
+        if (!backupCheck.isSuccess()) {
+            throw new RuntimeException(backupCheck.failure("\u68c0\u67e5\u5907\u4efd\u76ee\u5f55"));
+        }
+        boolean hasBackup = !backupCheck.stdout.trim().isEmpty();
         if (!hasBackup) {
             log("① 首次替换：备份原版覆盖项...");
             backupCovered(gfiles, top);
