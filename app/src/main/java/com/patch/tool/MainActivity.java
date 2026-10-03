@@ -261,15 +261,36 @@ public class MainActivity extends Activity {
 
     private String q(String s) { return "'" + s.replace("'", "'\\''") + "'"; }
 
-    // 保证 zip 可被 Java 读取：若在受保护区(Android/data等)，先 root 拷到 cache
+    // 保证 zip 可被 Java 读取：若在受保护区(Android/data等)，先由 shell 拷到外部缓存。
+    // 不能使用 getCacheDir()：Shizuku 以 shell 身份运行，无权写应用私有目录。
+    private File workDir() throws Exception {
+        File dir = getExternalCacheDir();
+        if (dir == null) dir = getCacheDir();
+        if (!dir.exists() && !dir.mkdirs() && !dir.isDirectory()) {
+            throw new RuntimeException("无法创建中转目录: " + dir);
+        }
+        return dir;
+    }
+
     private String workZip(String zip) throws Exception {
         boolean readable = false;
         try (ZipFile z = new ZipFile(zip)) { readable = true; }
         catch (Throwable t) { readable = false; }
         if (readable) return zip;
-        File dest = new File(getCacheDir(), "pull.zip");
-        if (dest.exists()) dest.delete();
-        ShellExec.execOut("cp -f " + q(zip) + " " + q(dest.getAbsolutePath()));
+
+        File dest = new File(workDir(), "pull.zip");
+        if (dest.exists() && !dest.delete()) {
+            ShellExec.execOut("rm -f " + q(dest.getAbsolutePath()));
+        }
+        ShellResult copy = ShellExec.exec("cp -f " + q(zip) + " " + q(dest.getAbsolutePath()));
+        if (!copy.isSuccess()) {
+            throw new RuntimeException(copy.failure("复制源 ZIP 到中转目录"));
+        }
+        try (ZipFile ignored = new ZipFile(dest)) {
+            // 确认中转 ZIP 可由应用进程读取，避免解压阶段才失败。
+        } catch (Throwable t) {
+            throw new RuntimeException("中转 ZIP 无法读取: " + dest, t);
+        }
         return dest.getAbsolutePath();
     }
 
@@ -297,7 +318,7 @@ public class MainActivity extends Activity {
     }
 
     private List<String> unzipStructure(String zipPath) throws Exception {
-        File dst = new File(getCacheDir(), "ziproot");
+        File dst = new File(workDir(), "ziproot");
         deleteRecursive(dst);
         dst.mkdirs();
         try (ZipFile zf = new ZipFile(zipPath)) {
@@ -403,7 +424,7 @@ public class MainActivity extends Activity {
         }
         log("② 解压替换中...");
         unzipStructure(wrk);
-        File filesRoot = new File(new File(getCacheDir(), "ziproot"), "files");
+        File filesRoot = new File(new File(workDir(), "ziproot"), "files");
         if (!filesRoot.isDirectory()) { log("未发现 files/ 根，已中止"); return; }
         ShellExec.execOut("mkdir -p " + q(gfiles));
         ShellExec.execOut("cp -rf " + q(filesRoot.getAbsolutePath()) + "/. " + q(gfiles) + "/");
